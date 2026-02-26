@@ -23,6 +23,7 @@ export interface Book {
   excerpts?: string;
   readingDuration?: number; // in minutes
   nextReviewDate?: string;
+  reviewStage?: number; // 0, 1, 2, 3, 4, 5...
   mindMapUrl?: string;
   additionalPhotos?: string[];
   chapters?: Chapter[];

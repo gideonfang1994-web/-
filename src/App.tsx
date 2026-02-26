@@ -33,7 +33,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Book, BookStatus, Recommendation, Chapter, UserStats } from './types';
 import { generateBookSummary, getBookRecommendations } from './services/gemini';
 import { cn } from './utils';
-import { addMonths, format, isPast } from 'date-fns';
+import { addMonths, addDays, format, isPast } from 'date-fns';
 import Markdown from 'react-markdown';
 
 // --- Constants & Helpers ---
@@ -55,13 +55,16 @@ const getLevelInfo = (exp: number) => {
 const ChapterItem = ({ chapter }: { chapter: Chapter }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   return (
-    <div className="border-b border-black/[0.03] last:border-0">
+    <div className="border-b border-black/[0.02] last:border-0">
       <button 
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full py-4 flex items-center justify-between text-left hover:bg-black/[0.01] px-5 transition-colors group"
+        className="w-full py-3 flex items-center justify-between text-left hover:bg-black/[0.01] px-4 transition-colors group"
       >
-        <span className="ancient font-bold text-ink/90 text-lg group-hover:text-ink transition-colors tracking-wide">{chapter.title}</span>
-        {isExpanded ? <ChevronUp size={16} className="text-stone-400" /> : <ChevronDown size={16} className="text-stone-400" />}
+        <div className="flex items-center gap-3">
+          <div className="w-1 h-1 rounded-full bg-vermilion/20 group-hover:bg-vermilion/50 transition-colors" />
+          <span className="ancient font-bold text-ink/80 text-lg group-hover:text-ink transition-colors tracking-tight">{chapter.title}</span>
+        </div>
+        <ChevronRight size={14} className={cn("text-stone-300 transition-transform duration-300", isExpanded && "rotate-90")} />
       </button>
       <AnimatePresence>
         {isExpanded && (
@@ -69,9 +72,9 @@ const ChapterItem = ({ chapter }: { chapter: Chapter }) => {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden bg-stone-100/30"
+            className="overflow-hidden bg-stone-50/50"
           >
-            <div className="px-5 pb-5 pt-2 text-base text-stone-600 leading-relaxed serif whitespace-pre-wrap italic">
+            <div className="px-8 pb-4 pt-1 text-base text-stone-500 leading-relaxed serif whitespace-pre-wrap italic opacity-80">
               {chapter.content}
             </div>
           </motion.div>
@@ -81,22 +84,32 @@ const ChapterItem = ({ chapter }: { chapter: Chapter }) => {
   );
 };
 
+const isReviewDue = (dateStr?: string) => {
+  if (!dateStr) return false;
+  try {
+    const date = new Date(dateStr);
+    return !isNaN(date.getTime()) && isPast(date);
+  } catch (e) {
+    return false;
+  }
+};
+
 const BookCard = ({ book, onClick, onShare }: { book: Book, onClick: () => void, onShare: (e: React.MouseEvent) => void }) => (
   <motion.div 
     layoutId={book.id}
     onClick={onClick}
-    className="group relative bg-white rounded-sm overflow-hidden border-l-[4px] border-accent/30 book-shadow hover:translate-y-[-4px] transition-all duration-300 cursor-pointer flex flex-col h-full"
+    className="group relative bg-white rounded-sm overflow-hidden border-l-[3px] border-accent/10 book-shadow hover:translate-y-[-2px] transition-all duration-300 cursor-pointer flex flex-col h-full"
   >
-    <div className="aspect-[3/4] overflow-hidden bg-stone-200 relative">
+    <div className="aspect-[3/4] overflow-hidden bg-stone-100 relative">
       <img 
         src={book.coverUrl || `https://picsum.photos/seed/${book.id}/400/600`} 
         alt={book.title}
         className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105 grayscale hover:grayscale-0 transition-all"
         referrerPolicy="no-referrer"
       />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
       
-      <div className="absolute top-2 right-2 flex flex-col gap-1.5">
+      <div className="absolute top-1.5 right-1.5 flex flex-col gap-1">
         <button 
           onClick={onShare}
           className="p-1.5 bg-white/90 backdrop-blur rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-all duration-300 hover:bg-ink hover:text-white"
@@ -105,8 +118,8 @@ const BookCard = ({ book, onClick, onShare }: { book: Book, onClick: () => void,
         </button>
       </div>
       
-      {book.nextReviewDate && isPast(new Date(book.nextReviewDate)) && (
-        <div className="absolute top-0 left-0 bg-ink text-paper text-[7px] font-bold px-1.5 py-0.5 uppercase tracking-[0.2em] rounded-br-sm shadow-sm ancient z-10">
+      {isReviewDue(book.nextReviewDate) && (
+        <div className="absolute top-0 left-0 bg-vermilion text-paper text-[7px] font-bold px-1.5 py-0.5 uppercase tracking-[0.2em] rounded-br-sm shadow-sm ancient z-10">
           待复习
         </div>
       )}
@@ -116,7 +129,10 @@ const BookCard = ({ book, onClick, onShare }: { book: Book, onClick: () => void,
         <motion.div 
           initial={{ width: 0 }}
           animate={{ width: book.status === 'finished' ? '100%' : book.status === 'reading' ? '45%' : '0%' }}
-          className="h-full bg-ink/40"
+          className={cn("h-full transition-colors duration-500", 
+            book.status === 'finished' ? "bg-teal" : 
+            book.status === 'reading' ? "bg-indigo" : "bg-stone-300"
+          )}
         />
       </div>
     </div>
@@ -130,7 +146,7 @@ const BookCard = ({ book, onClick, onShare }: { book: Book, onClick: () => void,
             <Star 
               key={i} 
               size={7} 
-              className={cn(i < book.rating ? "fill-ink/60 text-ink/60" : "text-stone-100")} 
+              className={cn(i < book.rating ? "fill-gold text-gold" : "text-stone-100")} 
             />
           ))}
         </div>
@@ -174,8 +190,13 @@ const Modal = ({ isOpen, onClose, children }: { isOpen: boolean, onClose: () => 
 
 export default function App() {
   const [books, setBooks] = useState<Book[]>(() => {
-    const saved = localStorage.getItem('shiori-books');
-    return saved ? JSON.parse(saved) : [
+    try {
+      const saved = localStorage.getItem('shiori-books');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error('Failed to parse books from localStorage', e);
+    }
+    return [
       {
         id: '1',
         title: '红楼梦',
@@ -194,8 +215,12 @@ export default function App() {
   });
 
   const [stats, setStats] = useState<UserStats>(() => {
-    const saved = localStorage.getItem('shiori-stats');
-    if (saved) return JSON.parse(saved);
+    try {
+      const saved = localStorage.getItem('shiori-stats');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error('Failed to parse stats from localStorage', e);
+    }
     
     return {
       experience: 150,
@@ -218,6 +243,12 @@ export default function App() {
   const [isLoadingRecs, setIsLoadingRecs] = useState(false);
   const [activeTab, setActiveTab] = useState<'shelf' | 'review'>('shelf');
 
+  const calculateNextReviewDate = (stage: number) => {
+    const intervals = [1, 2, 4, 7, 15, 30, 60, 120]; // days
+    const interval = intervals[Math.min(stage, intervals.length - 1)];
+    return format(addDays(new Date(), interval), 'yyyy-MM-dd');
+  };
+
   useEffect(() => {
     localStorage.setItem('shiori-books', JSON.stringify(books));
     
@@ -239,7 +270,17 @@ export default function App() {
     localStorage.setItem('shiori-stats', JSON.stringify(newStats));
   }, [books]);
 
-  const reviewNeededBooks = books.filter(b => b.nextReviewDate && isPast(new Date(b.nextReviewDate)));
+  const reviewNeededBooks = useMemo(() => {
+    return books.filter(b => {
+      if (!b.nextReviewDate) return false;
+      try {
+        const date = new Date(b.nextReviewDate);
+        return !isNaN(date.getTime()) && isPast(date);
+      } catch (e) {
+        return false;
+      }
+    });
+  }, [books]);
   const filteredBooks = filter === 'all' ? books : books.filter(b => b.status === filter);
 
   const randomExcerpt = useMemo(() => {
@@ -265,7 +306,7 @@ export default function App() {
   };
 
   const handleAddBook = (newBook: Partial<Book>) => {
-    const book: Book = {
+    let book: Book = {
       id: Math.random().toString(36).substr(2, 9),
       title: newBook.title || '无题',
       author: newBook.author || '未知作者',
@@ -279,6 +320,10 @@ export default function App() {
     if (book.status === 'finished') {
       setShowReward({ points: 200, message: '录入并读完新卷，获得 200 经验！' });
       setTimeout(() => setShowReward(null), 3000);
+      if (!book.nextReviewDate) {
+        book.nextReviewDate = calculateNextReviewDate(0);
+        book.reviewStage = 0;
+      }
     }
     
     setBooks([book, ...books]);
@@ -294,12 +339,33 @@ export default function App() {
 
   const handleUpdateBook = (updated: Book) => {
     const oldBook = books.find(b => b.id === updated.id);
+    let finalBook = updated;
     if (oldBook?.status !== 'finished' && updated.status === 'finished') {
       setShowReward({ points: 200, message: '恭喜读完此卷，获得 200 经验！' });
       setTimeout(() => setShowReward(null), 3000);
+      if (!updated.nextReviewDate) {
+        finalBook = {
+          ...updated,
+          reviewStage: 0,
+          nextReviewDate: calculateNextReviewDate(0)
+        };
+      }
     }
-    setBooks(books.map(b => b.id === updated.id ? updated : b));
-    setSelectedBook(updated);
+    setBooks(books.map(b => b.id === finalBook.id ? finalBook : b));
+    setSelectedBook(finalBook);
+  };
+
+  const handleCompleteReview = (book: Book) => {
+    const nextStage = (book.reviewStage || 0) + 1;
+    const nextDate = calculateNextReviewDate(nextStage);
+    const updated = {
+      ...book,
+      reviewStage: nextStage,
+      nextReviewDate: nextDate
+    };
+    handleUpdateBook(updated);
+    setShowReward({ points: 50, message: `复习完成！进入第 ${nextStage + 1} 阶段` });
+    setTimeout(() => setShowReward(null), 3000);
   };
 
   const fetchRecommendations = async () => {
@@ -338,74 +404,77 @@ export default function App() {
       </AnimatePresence>
 
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-paper/80 backdrop-blur-md border-b border-black/[0.03] px-6 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-5">
+      <header className="sticky top-0 z-40 bg-paper/90 backdrop-blur-md border-b border-black/[0.02] px-4 py-3">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-4">
             <motion.div 
               whileHover={{ rotate: -2, scale: 1.02 }}
-              className="w-12 h-12 bg-ink rounded-sm flex items-center justify-center text-paper shadow-lg relative group"
+              className="w-10 h-10 bg-ink rounded-sm flex items-center justify-center text-paper shadow-lg relative group"
             >
-              <BookOpen size={24} />
+              <BookOpen size={20} />
               <div className="absolute inset-0 border border-white/10 rounded-sm scale-90 group-hover:scale-100 transition-transform" />
             </motion.div>
             <div>
-              <h1 className="ancient font-bold text-3xl tracking-tight text-ink ink-gradient">太虚幻境</h1>
-              <div className="flex items-center gap-2.5 mt-0.5">
-                <span className="text-[10px] font-bold text-vermilion uppercase tracking-[0.3em] serif opacity-60">Sanctuary</span>
-                <div className="w-1 h-1 rounded-full bg-black/5" />
-                <span className="text-[10px] text-stone-400 font-bold uppercase tracking-widest ancient">LV.{stats.level} {stats.rank}</span>
+              <h1 className="ancient font-bold text-2xl tracking-tight text-ink ink-gradient">太虚幻境</h1>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[9px] font-bold text-vermilion uppercase tracking-[0.3em] serif opacity-60">Sanctuary</span>
+                <div className="w-0.5 h-0.5 rounded-full bg-black/5" />
+                <span className="text-[9px] text-stone-400 font-bold uppercase tracking-widest ancient">LV.{stats.level} {stats.rank}</span>
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-8">
+          <div className="flex items-center gap-6">
             <div className="hidden sm:flex flex-col items-end">
-              <div className="flex items-center gap-2 text-ink/60">
-                <Trophy size={14} className="opacity-30" />
-                <span className="text-[11px] font-bold tracking-[0.15em] ancient">{stats.experience} XP</span>
+              <div className="flex items-center gap-1.5 text-ink/60">
+                <Trophy size={12} className="opacity-30" />
+                <span className="text-[10px] font-bold tracking-[0.15em] ancient">{stats.experience} XP</span>
               </div>
-              <div className="w-32 h-[1px] bg-black/5 rounded-full mt-1.5 overflow-hidden relative">
+              <div className="w-24 h-[1px] bg-black/5 rounded-full mt-1 overflow-hidden relative">
                 <motion.div 
                   initial={{ width: 0 }}
                   animate={{ width: `${(stats.experience % 1000) / 10}%` }}
-                  className="h-full bg-ink/30 relative z-10"
+                  className="h-full bg-indigo/40 relative z-10"
                 />
               </div>
             </div>
             <button 
               onClick={() => setIsAdding(true)}
-              className="flex items-center gap-2.5 bg-ink text-paper px-6 py-2.5 rounded-sm font-bold shadow-xl shadow-black/10 hover:bg-ink/90 transition-all active:scale-95 ancient text-lg group"
+              className="flex items-center gap-2 bg-ink text-paper px-4 py-2 rounded-sm font-bold shadow-xl shadow-black/10 hover:bg-ink/90 transition-all active:scale-95 ancient text-base group"
             >
-              <Plus size={18} className="group-hover:rotate-90 transition-transform duration-500" />
+              <Plus size={16} className="group-hover:rotate-90 transition-transform duration-500" />
               <span>记录</span>
             </button>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 mt-8">
+      <main className="max-w-7xl mx-auto px-4 mt-6">
         {/* Review Banner */}
         {reviewNeededBooks.length > 0 && (
           <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-10 bg-white p-6 rounded-sm border border-black/[0.03] shadow-soft flex items-center justify-between relative overflow-hidden group"
+            className="mb-6 bg-white p-3 rounded-sm border border-black/[0.02] shadow-soft flex items-center justify-between relative overflow-hidden group"
           >
             <div className="absolute left-0 top-0 bottom-0 w-1 bg-vermilion/40" />
-            <div className="flex items-center gap-6 relative z-10">
-              <div className="w-12 h-12 bg-black/[0.02] text-vermilion rounded-full flex items-center justify-center border border-black/[0.03]">
-                <Bell size={22} className="animate-pulse" />
+            <div className="flex items-center gap-3 relative z-10">
+              <div className="w-8 h-8 bg-vermilion/5 text-vermilion rounded-full flex items-center justify-center border border-vermilion/10">
+                <Bell size={14} className="animate-pulse" />
               </div>
               <div>
-                <h4 className="font-bold text-ink text-xl ancient tracking-tight">温故知新</h4>
-                <p className="text-stone-400 text-sm mt-0.5 serif italic">你有 {reviewNeededBooks.length} 本书待复习。</p>
+                <h4 className="font-bold text-ink text-base ancient tracking-tight">温故知新</h4>
+                <p className="text-stone-400 text-[10px] serif italic">你有 {reviewNeededBooks.length} 本书待复习。</p>
               </div>
             </div>
             <button 
               onClick={() => {
                 setActiveTab('review');
                 setFilter('all');
+                setTimeout(() => {
+                  document.getElementById('book-grid')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 100);
               }}
-              className="relative z-10 text-[11px] font-bold text-ink border border-black/10 px-5 py-2.5 rounded-sm hover:bg-ink hover:text-paper transition-all ancient tracking-widest"
+              className="relative z-10 text-[9px] font-bold text-paper bg-vermilion px-3 py-1.5 rounded-sm hover:bg-vermilion/90 transition-all ancient tracking-widest shadow-lg shadow-vermilion/20"
             >
               立即复习
             </button>
@@ -413,23 +482,23 @@ export default function App() {
         )}
 
         {/* Dashboard Section */}
-        <div className="mb-16">
-          <div className="bg-white p-10 md:p-14 rounded-sm border border-black/[0.03] shadow-soft relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-10 opacity-[0.02] pointer-events-none group-hover:scale-105 transition-transform duration-2000">
-              <Library size={240} />
+        <div className="mb-8">
+          <div className="bg-white p-6 md:p-8 rounded-sm border border-black/[0.02] shadow-soft relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-6 opacity-[0.02] pointer-events-none group-hover:scale-105 transition-transform duration-2000">
+              <Library size={160} />
             </div>
             <div className="relative z-10">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="h-[1px] w-10 bg-black/10" />
-                <span className="text-[10px] font-bold uppercase tracking-[0.4em] text-stone-400 serif">Achievement</span>
+              <div className="flex items-center gap-3 mb-3">
+                <div className="h-[1px] w-6 bg-vermilion/20" />
+                <span className="text-[8px] font-bold uppercase tracking-[0.3em] text-vermilion/40 serif">Achievement</span>
               </div>
-              <h2 className="ancient text-4xl font-bold mb-6 text-ink ink-gradient">阅读成就</h2>
-              <div className="max-w-3xl">
-                <p className="text-stone-500 text-lg serif italic leading-relaxed opacity-90">
+              <h2 className="ancient text-2xl font-bold mb-3 text-ink ink-gradient">阅读成就</h2>
+              <div className="max-w-xl">
+                <p className="text-stone-500 text-sm serif italic leading-relaxed opacity-90">
                   {randomExcerpt ? (
                     <span className="relative">
                       “{randomExcerpt.text}” 
-                      <span className="block mt-3 text-[11px] not-italic font-bold tracking-widest opacity-40 ancient">—— {randomExcerpt.author}《{randomExcerpt.title}》</span>
+                      <span className="block mt-1.5 text-[9px] not-italic font-bold tracking-widest opacity-40 ancient text-indigo">—— {randomExcerpt.author}《{randomExcerpt.title}》</span>
                     </span>
                   ) : (
                     <>“读书百遍，其义自见。” 你已在幻境中积累了深厚的知识底蕴。</>
@@ -437,30 +506,30 @@ export default function App() {
                 </p>
               </div>
               
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-12 mt-12">
-                <div className="space-y-2 group/stat">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-stone-300 group-hover/stat:text-ink transition-colors">已读完</p>
-                  <div className="flex items-baseline gap-2">
-                    <p className="text-5xl font-bold ancient text-ink">{stats.booksCompleted}</p>
-                    <span className="text-sm text-stone-300 serif italic">卷</span>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-8">
+                <div className="space-y-0.5 group/stat">
+                  <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-stone-300 group-hover/stat:text-teal transition-colors">已读完</p>
+                  <div className="flex items-baseline gap-1.5">
+                    <p className="text-3xl font-bold ancient text-ink group-hover/stat:text-teal transition-colors">{stats.booksCompleted}</p>
+                    <span className="text-[10px] text-stone-300 serif italic">卷</span>
                   </div>
                 </div>
-                <div className="space-y-1 group/stat">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-accent/40 serif group-hover/stat:text-accent transition-colors">累计时长</p>
-                  <div className="flex items-baseline gap-2">
-                    <p className="text-4xl font-bold ancient text-ink">{stats.readingMinutes}</p>
-                    <span className="text-xs text-stone-300 serif italic">分</span>
+                <div className="space-y-0.5 group/stat">
+                  <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-stone-300 group-hover/stat:text-indigo transition-colors">累计时长</p>
+                  <div className="flex items-baseline gap-1.5">
+                    <p className="text-3xl font-bold ancient text-ink group-hover/stat:text-indigo transition-colors">{stats.readingMinutes}</p>
+                    <span className="text-[10px] text-stone-300 serif italic">分</span>
                   </div>
                 </div>
-                <div className="space-y-1 group/stat">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-accent/40 serif group-hover/stat:text-accent transition-colors">当前等级</p>
-                  <p className="text-xl font-bold ancient text-accent mt-1 tracking-tight">{stats.rank}</p>
+                <div className="space-y-0.5 group/stat">
+                  <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-stone-300 group-hover/stat:text-vermilion transition-colors">当前等级</p>
+                  <p className="text-lg font-bold ancient text-indigo/60 mt-0.5 tracking-tight group-hover/stat:text-vermilion transition-colors">{stats.rank}</p>
                 </div>
-                <div className="space-y-1 group/stat">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-accent/40 serif group-hover/stat:text-accent transition-colors">累计章节</p>
-                  <div className="flex items-baseline gap-2">
-                    <p className="text-4xl font-bold ancient text-ink">{books.reduce((acc, b) => acc + (b.chapters?.length || 0), 0)}</p>
-                    <span className="text-xs text-stone-300 serif italic">章</span>
+                <div className="space-y-0.5 group/stat">
+                  <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-stone-300 group-hover/stat:text-gold transition-colors">累计章节</p>
+                  <div className="flex items-baseline gap-1.5">
+                    <p className="text-3xl font-bold ancient text-ink group-hover/stat:text-gold transition-colors">{books.reduce((acc, b) => acc + (b.chapters?.length || 0), 0)}</p>
+                    <span className="text-[10px] text-stone-300 serif italic">章</span>
                   </div>
                 </div>
               </div>
@@ -469,31 +538,31 @@ export default function App() {
         </div>
 
         {/* Navigation & Filter */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10 border-b border-black/[0.03] pb-4">
-          <div className="flex items-center gap-10">
+        <div id="book-grid" className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-6 border-b border-black/[0.02] pb-2">
+          <div className="flex items-center gap-5">
             <button 
               onClick={() => setActiveTab('shelf')}
               className={cn(
-                "text-lg font-bold transition-all flex items-center gap-2.5 relative py-2 ancient tracking-widest group",
+                "text-sm font-bold transition-all flex items-center gap-2 relative py-1 ancient tracking-widest group",
                 activeTab === 'shelf' ? "text-ink" : "text-stone-300 hover:text-stone-500"
               )}
             >
-              <Library size={20} className={cn("transition-transform group-hover:scale-110", activeTab === 'shelf' ? "opacity-100" : "opacity-20")} /> 我的书架
+              <Library size={14} className={cn("transition-transform group-hover:scale-110", activeTab === 'shelf' ? "opacity-100" : "opacity-20")} /> 我的书架
               {activeTab === 'shelf' && <motion.div layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-[1px] bg-ink" />}
             </button>
             <button 
               onClick={() => setActiveTab('review')}
               className={cn(
-                "text-lg font-bold transition-all flex items-center gap-2.5 relative py-2 ancient tracking-widest group",
+                "text-sm font-bold transition-all flex items-center gap-2 relative py-1 ancient tracking-widest group",
                 activeTab === 'review' ? "text-ink" : "text-stone-300 hover:text-stone-500"
               )}
             >
-              <Bookmark size={20} className={cn("transition-transform group-hover:scale-110", activeTab === 'review' ? "opacity-100" : "opacity-20")} /> 复习计划
+              <Bookmark size={14} className={cn("transition-transform group-hover:scale-110", activeTab === 'review' ? "opacity-100" : "opacity-20")} /> 复习计划
               {activeTab === 'review' && <motion.div layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-[1px] bg-ink" />}
             </button>
           </div>
 
-          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar bg-black/[0.02] p-1 rounded-sm border border-black/[0.03]">
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar bg-black/[0.01] p-0.5 rounded-sm border border-black/[0.02]">
             {[
               { id: 'all', label: '全部' },
               { id: 'reading', label: '正在读' },
@@ -504,9 +573,9 @@ export default function App() {
                 key={tab.id}
                 onClick={() => setFilter(tab.id as any)}
                 className={cn(
-                  "px-5 py-1.5 rounded-sm text-[11px] font-bold transition-all uppercase tracking-[0.2em] serif",
+                  "px-3 py-0.5 rounded-sm text-[9px] font-bold transition-all uppercase tracking-[0.1em] serif",
                   filter === tab.id 
-                    ? "bg-ink text-paper shadow-lg" 
+                    ? "bg-ink text-paper shadow-sm" 
                     : "bg-transparent text-stone-400 hover:text-ink"
                 )}
               >
@@ -517,7 +586,7 @@ export default function App() {
         </div>
 
         {/* Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
           {(activeTab === 'shelf' ? filteredBooks : reviewNeededBooks).map((book) => (
             <BookCard 
               key={book.id} 
@@ -543,7 +612,7 @@ export default function App() {
       <Modal isOpen={!!selectedBook} onClose={() => setSelectedBook(null)}>
         {selectedBook && (
           <div className="flex flex-col h-full">
-            <div className="relative h-48 bg-stone-100">
+            <div className="relative h-40 bg-stone-100">
               <img 
                 src={selectedBook.coverUrl} 
                 className="w-full h-full object-cover" 
@@ -553,57 +622,70 @@ export default function App() {
               <div className="absolute inset-0 bg-gradient-to-t from-paper via-transparent to-transparent" />
               <button 
                 onClick={() => setSelectedBook(null)}
-                className="absolute top-3 right-3 p-1.5 bg-black/10 backdrop-blur rounded-full text-white hover:bg-black/30 transition-colors"
+                className="absolute top-2 right-2 p-1 bg-black/10 backdrop-blur rounded-full text-white hover:bg-black/30 transition-colors"
               >
-                <X size={16} />
+                <X size={14} />
               </button>
             </div>
-            <div className="px-6 -mt-8 relative z-10 flex-1 overflow-y-auto pb-6 no-scrollbar">
-              <div className="flex justify-between items-end mb-4">
+            <div className="px-5 -mt-6 relative z-10 flex-1 overflow-y-auto pb-5 no-scrollbar">
+              <div className="flex justify-between items-end mb-3">
                 <div>
-                  <h2 className="ancient text-3xl font-bold text-balance ink-gradient">{selectedBook.title}</h2>
-                  <p className="text-stone-400 mt-0.5 text-xs serif italic opacity-70">by {selectedBook.author}</p>
+                  <h2 className="ancient text-2xl font-bold text-balance ink-gradient">{selectedBook.title}</h2>
+                  <p className="text-stone-400 mt-0.5 text-[10px] serif italic opacity-70">by {selectedBook.author}</p>
                 </div>
-                <div className="flex items-center gap-0.5 bg-white/80 px-2.5 py-1.5 rounded-full border border-black/[0.03] shadow-sm backdrop-blur-sm">
+                <div className="flex items-center gap-0.5 bg-white/80 px-2 py-1 rounded-full border border-black/[0.03] shadow-sm backdrop-blur-sm">
                   {[...Array(5)].map((_, i) => (
                     <Star 
                       key={i} 
-                      size={14} 
+                      size={12} 
                       className={cn(i < selectedBook.rating ? "fill-ink/80 text-ink/80" : "text-stone-100")} 
                     />
                   ))}
                 </div>
               </div>
 
-              <div className="flex gap-2 mb-8">
+              <div className="flex gap-1.5 mb-6 overflow-x-auto no-scrollbar">
                 {selectedBook.keywords?.map((kw, i) => (
-                  <span key={i} className="px-2.5 py-1 bg-black/[0.02] text-stone-500 text-[10px] font-bold rounded-sm border border-black/[0.03] tracking-wider">#{kw}</span>
+                  <span key={i} className="px-2 py-0.5 bg-black/[0.02] text-stone-500 text-[9px] font-bold rounded-sm border border-black/[0.03] tracking-wider whitespace-nowrap">#{kw}</span>
                 ))}
               </div>
 
-              <div className="space-y-8">
-                <section className="grid grid-cols-2 gap-6">
+              <div className="space-y-6">
+                <section className="grid grid-cols-2 gap-4">
                   <div>
-                    <h3 className="text-[10px] uppercase font-bold tracking-[0.3em] text-stone-300 serif mb-3">阅读历程</h3>
-                    <div className="space-y-2">
+                    <h3 className="text-[9px] uppercase font-bold tracking-[0.2em] text-stone-300 serif mb-2">阅读历程</h3>
+                    <div className="space-y-1.5">
                       {selectedBook.readingSessions && selectedBook.readingSessions.length > 0 ? (
                         selectedBook.readingSessions.map((session) => (
-                          <div key={session.id} className="flex items-center justify-between bg-stone-50/50 p-2.5 rounded-sm border border-black/[0.01]">
-                            <span className="text-[11px] font-bold text-ink/60 ancient tracking-wide">{session.label}</span>
-                            <span className="text-[10px] text-stone-400 serif">{session.date}</span>
+                          <div key={session.id} className="flex items-center justify-between bg-stone-50/50 p-2 rounded-sm border border-black/[0.01]">
+                            <span className="text-[10px] font-bold text-ink/60 ancient tracking-wide">{session.label}</span>
+                            <span className="text-[9px] text-stone-400 serif">{session.date}</span>
                           </div>
                         ))
                       ) : (
-                        <p className="text-[11px] text-stone-300 italic serif">暂无记录</p>
+                        <p className="text-[10px] text-stone-300 italic serif">暂无记录</p>
                       )}
                     </div>
                   </div>
                   <div>
-                    <h3 className="text-[10px] uppercase font-bold tracking-[0.3em] text-stone-300 serif mb-3">下次复习</h3>
-                    <div className="bg-vermilion/[0.02] p-2.5 rounded-sm border border-vermilion/[0.05] flex items-center gap-2.5">
-                      <Calendar size={14} className="text-vermilion/30" />
-                      <span className="text-[11px] font-bold text-vermilion/60 ancient tracking-widest">{selectedBook.nextReviewDate || '未设置'}</span>
+                    <h3 className="text-[9px] uppercase font-bold tracking-[0.2em] text-stone-300 serif mb-2">下次复习</h3>
+                    <div className="bg-vermilion/[0.02] p-2 rounded-sm border border-vermilion/[0.05] flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Calendar size={12} className="text-vermilion/30" />
+                        <span className="text-[10px] font-bold text-vermilion/60 ancient tracking-widest">{selectedBook.nextReviewDate || '未设置'}</span>
+                      </div>
+                      {selectedBook.nextReviewDate && isPast(new Date(selectedBook.nextReviewDate)) && (
+                        <button 
+                          onClick={() => handleCompleteReview(selectedBook)}
+                          className="px-1.5 py-0.5 bg-vermilion text-paper text-[8px] font-bold rounded-sm ancient hover:opacity-90 transition-opacity"
+                        >
+                          完成
+                        </button>
+                      )}
                     </div>
+                    {selectedBook.reviewStage !== undefined && (
+                      <p className="text-[7px] text-stone-300 mt-1 serif italic">阶段: {selectedBook.reviewStage + 1}</p>
+                    )}
                   </div>
                 </section>
 
@@ -735,19 +817,19 @@ export default function App() {
         setDraftChapters([]);
         setDraftSessions([]);
       }}>
-        <div className="p-10 flex flex-col h-full">
-          <div className="flex items-center justify-between mb-10">
-            <h2 className="ancient text-4xl font-bold">{editingBook ? '编辑卷轴' : '记录新书'}</h2>
+        <div className="p-6 md:p-8 flex flex-col h-full">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="ancient text-2xl font-bold">{editingBook ? '编辑卷轴' : '记录新书'}</h2>
             <button onClick={() => {
               setIsAdding(false);
               setEditingBook(null);
-            }} className="p-2 hover:bg-stone-100 rounded-full transition-colors">
-              <X size={24} />
+            }} className="p-1.5 hover:bg-stone-100 rounded-full transition-colors">
+              <X size={20} />
             </button>
           </div>
           
           <form 
-            className="space-y-6 flex-1 overflow-y-auto pr-2"
+            className="space-y-4 flex-1 overflow-y-auto pr-2 no-scrollbar"
             onSubmit={(e) => {
               e.preventDefault();
               const formData = new FormData(e.currentTarget);
@@ -766,7 +848,8 @@ export default function App() {
                 notes: formData.get('notes') as string,
                 excerpts: formData.get('excerpts') as string,
                 readingDuration: Number(formData.get('readingDuration')),
-                nextReviewDate: formData.get('nextReviewDate') as string,
+                nextReviewDate: formData.get('nextReviewDate') as string || (editingBook?.nextReviewDate ? editingBook.nextReviewDate : (formData.get('status') === 'finished' ? calculateNextReviewDate(0) : undefined)),
+                reviewStage: editingBook?.reviewStage ?? 0,
                 coverUrl: formData.get('coverUrl') as string,
                 mindMapUrl: formData.get('mindMapUrl') as string,
                 chapters,
