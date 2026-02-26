@@ -33,8 +33,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Book, BookStatus, Recommendation, Chapter, UserStats } from './types';
 import { generateBookSummary, getBookRecommendations } from './services/gemini';
 import { cn } from './utils';
-import { addMonths, addDays, format, isPast } from 'date-fns';
+import { addMonths, addDays, format, isPast, formatDistanceToNow } from 'date-fns';
+import { zhCN } from 'date-fns/locale';
 import Markdown from 'react-markdown';
+import { toPng } from 'html-to-image';
 
 // --- Constants & Helpers ---
 
@@ -44,6 +46,8 @@ const LEVELS = [
   { min: 1000, rank: '资深读者', level: 3 },
   { min: 3000, rank: '博览群书', level: 4 },
   { min: 8000, rank: '阅读大师', level: 5 },
+  { min: 15000, rank: '学富五车', level: 6 },
+  { min: 30000, rank: '一代宗师', level: 7 },
 ];
 
 const getLevelInfo = (exp: number) => {
@@ -55,16 +59,16 @@ const getLevelInfo = (exp: number) => {
 const ChapterItem = ({ chapter }: { chapter: Chapter }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   return (
-    <div className="border-b border-black/[0.02] last:border-0">
+    <div className="border-b border-black/[0.01] last:border-0">
       <button 
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full py-3 flex items-center justify-between text-left hover:bg-black/[0.01] px-4 transition-colors group"
+        className="w-full py-2.5 flex items-center justify-between text-left hover:bg-black/[0.01] px-4 transition-colors group"
       >
         <div className="flex items-center gap-3">
-          <div className="w-1 h-1 rounded-full bg-vermilion/20 group-hover:bg-vermilion/50 transition-colors" />
-          <span className="ancient font-bold text-ink/80 text-lg group-hover:text-ink transition-colors tracking-tight">{chapter.title}</span>
+          <div className="w-1 h-1 rounded-full bg-vermilion/30 group-hover:bg-vermilion/60 transition-colors shadow-sm shadow-vermilion/20" />
+          <span className="ancient font-bold text-ink/70 text-base group-hover:text-ink transition-colors tracking-tight">{chapter.title}</span>
         </div>
-        <ChevronRight size={14} className={cn("text-stone-300 transition-transform duration-300", isExpanded && "rotate-90")} />
+        <ChevronRight size={12} className={cn("text-stone-300 transition-transform duration-300", isExpanded && "rotate-90")} />
       </button>
       <AnimatePresence>
         {isExpanded && (
@@ -72,9 +76,9 @@ const ChapterItem = ({ chapter }: { chapter: Chapter }) => {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden bg-stone-50/50"
+            className="overflow-hidden bg-stone-50/30"
           >
-            <div className="px-8 pb-4 pt-1 text-base text-stone-500 leading-relaxed serif whitespace-pre-wrap italic opacity-80">
+            <div className="px-8 pb-4 pt-1 text-sm text-stone-500 leading-relaxed serif whitespace-pre-wrap italic opacity-80 border-l border-vermilion/10 ml-4.5">
               {chapter.content}
             </div>
           </motion.div>
@@ -98,49 +102,49 @@ const BookCard = ({ book, onClick, onShare }: { book: Book, onClick: () => void,
   <motion.div 
     layoutId={book.id}
     onClick={onClick}
-    className="group relative bg-white rounded-sm overflow-hidden border-l-[3px] border-accent/10 book-shadow hover:translate-y-[-2px] transition-all duration-300 cursor-pointer flex flex-col h-full"
+    className="group relative bg-white rounded-sm overflow-hidden border border-black/[0.01] book-shadow hover:translate-y-[-2px] transition-all duration-300 cursor-pointer flex flex-col h-full"
   >
-    <div className="aspect-[3/4] overflow-hidden bg-stone-100 relative">
+    <div className="aspect-[3/4] overflow-hidden bg-stone-50 relative">
       <img 
         src={book.coverUrl || `https://picsum.photos/seed/${book.id}/400/600`} 
         alt={book.title}
-        className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105 grayscale hover:grayscale-0 transition-all"
+        className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105 grayscale-[0.2] group-hover:grayscale-0 transition-all"
         referrerPolicy="no-referrer"
       />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
       
       <div className="absolute top-1.5 right-1.5 flex flex-col gap-1">
         <button 
           onClick={onShare}
-          className="p-1.5 bg-white/90 backdrop-blur rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-all duration-300 hover:bg-ink hover:text-white"
+          className="p-1.5 bg-white/80 backdrop-blur rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-all duration-300 hover:bg-ink hover:text-white"
         >
           <Share2 size={10} />
         </button>
       </div>
       
       {isReviewDue(book.nextReviewDate) && (
-        <div className="absolute top-0 left-0 bg-vermilion text-paper text-[7px] font-bold px-1.5 py-0.5 uppercase tracking-[0.2em] rounded-br-sm shadow-sm ancient z-10">
+        <div className="absolute top-0 left-0 bg-vermilion text-paper text-[7px] font-bold px-2 py-1 uppercase tracking-[0.2em] rounded-br-sm shadow-lg shadow-vermilion/20 ancient z-10">
           待复习
         </div>
       )}
 
-      {/* Progress Bar Overlay */}
-      <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-black/5">
-        <motion.div 
-          initial={{ width: 0 }}
-          animate={{ width: book.status === 'finished' ? '100%' : book.status === 'reading' ? '45%' : '0%' }}
-          className={cn("h-full transition-colors duration-500", 
-            book.status === 'finished' ? "bg-teal" : 
-            book.status === 'reading' ? "bg-indigo" : "bg-stone-300"
-          )}
-        />
+      {/* Status Badge */}
+      <div className="absolute bottom-1.5 left-1.5">
+        <div className={cn(
+          "px-1.5 py-0.5 rounded-full text-[6px] font-bold uppercase tracking-widest ancient backdrop-blur-sm border shadow-sm",
+          book.status === 'finished' ? "bg-teal/10 text-teal border-teal/20" : 
+          book.status === 'reading' ? "bg-indigo/10 text-indigo border-indigo/20" : 
+          "bg-stone-100/50 text-stone-400 border-stone-200/50"
+        )}>
+          {book.status === 'finished' ? '已读完' : book.status === 'reading' ? '正在读' : '想读'}
+        </div>
       </div>
     </div>
     <div className="p-2.5 flex-1 flex flex-col bg-white relative">
       <h3 className="ancient font-bold text-xs leading-tight line-clamp-2 mb-0.5 group-hover:text-ink transition-colors text-ink/90">{book.title}</h3>
       <p className="text-[8px] text-stone-400 font-medium mb-1.5 serif italic opacity-60">{book.author}</p>
       
-      <div className="mt-auto pt-1.5 border-t border-black/[0.03] flex items-center justify-between">
+      <div className="mt-auto pt-1.5 border-t border-black/[0.02] flex items-center justify-between">
         <div className="flex items-center gap-0.5">
           {[...Array(5)].map((_, i) => (
             <Star 
@@ -151,13 +155,23 @@ const BookCard = ({ book, onClick, onShare }: { book: Book, onClick: () => void,
           ))}
         </div>
         <div className="flex items-center gap-1.5">
+          {book.reviewHistory && book.reviewHistory.length > 0 && (
+            <span className="text-[6px] text-indigo/40 font-bold ancient tracking-tighter">
+              复习 {book.reviewHistory.length}
+            </span>
+          )}
           {book.chapters && book.chapters.length > 0 && (
-            <span className="text-[7px] px-1 py-0.5 bg-black/[0.02] rounded-sm text-stone-500 font-bold ancient tracking-wider">
+            <span className="text-[7px] px-1 py-0.5 bg-black/[0.01] rounded-sm text-stone-400 font-bold ancient tracking-wider border border-black/[0.02]">
               {book.chapters.length} 卷
             </span>
           )}
         </div>
       </div>
+      {book.reviewHistory && book.reviewHistory.length > 0 && (
+        <div className="mt-1 text-[6px] text-stone-300 serif italic opacity-60">
+          上次复习: {formatDistanceToNow(new Date(book.reviewHistory[book.reviewHistory.length - 1]), { addSuffix: true, locale: zhCN })}
+        </div>
+      )}
     </div>
   </motion.div>
 );
@@ -171,13 +185,13 @@ const Modal = ({ isOpen, onClose, children }: { isOpen: boolean, onClose: () => 
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50"
+          className="fixed inset-0 bg-ink/20 backdrop-blur-md z-50"
         />
         <motion.div 
-          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          initial={{ opacity: 0, scale: 0.98, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          className="fixed inset-x-4 top-[10%] bottom-[10%] md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-[600px] bg-paper rounded-3xl z-50 overflow-hidden shadow-2xl flex flex-col"
+          exit={{ opacity: 0, scale: 0.98, y: 10 }}
+          className="fixed inset-x-4 top-[8%] bottom-[8%] md:inset-x-auto md:left-1/2 md:-translate-x-1/2 md:w-[580px] bg-paper rounded-3xl z-50 overflow-hidden shadow-deep border border-black/[0.02] flex flex-col"
         >
           {children}
         </motion.div>
@@ -227,7 +241,8 @@ export default function App() {
       level: 1,
       rank: '初级读者',
       booksCompleted: 1,
-      readingMinutes: 300
+      readingMinutes: 300,
+      streak: 1
     };
   });
 
@@ -244,7 +259,8 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'shelf' | 'review'>('shelf');
 
   const calculateNextReviewDate = (stage: number) => {
-    const intervals = [1, 2, 4, 7, 15, 30, 60, 120]; // days
+    // Ebbinghaus Forgetting Curve intervals (days)
+    const intervals = [1, 2, 4, 7, 15, 30, 60, 120, 240]; 
     const interval = intervals[Math.min(stage, intervals.length - 1)];
     return format(addDays(new Date(), interval), 'yyyy-MM-dd');
   };
@@ -256,15 +272,46 @@ export default function App() {
     const finished = books.filter(b => b.status === 'finished').length;
     const duration = books.reduce((acc, b) => acc + (b.readingDuration || 0), 0);
     const chapterCount = books.reduce((acc, b) => acc + (b.chapters?.length || 0), 0);
-    const newExp = (finished * 200) + (duration * 1) + (chapterCount * 50);
+    const reviewCount = books.reduce((acc, b) => acc + (b.reviewHistory?.length || 0), 0);
+    
+    // XP Calculation:
+    // - Finished book: 500 XP
+    // - Reading duration: 2 XP per minute
+    // - Chapter recorded: 100 XP
+    // - Review completed: 150 XP
+    // - Streak bonus: streak * 50 XP
+    const baseExp = (finished * 500) + (duration * 2) + (chapterCount * 100) + (reviewCount * 150);
+    const streakBonus = (stats.streak || 1) * 50;
+    const newExp = baseExp + streakBonus;
+    
     const levelInfo = getLevelInfo(newExp);
     
-    const newStats = {
+    // Streak logic
+    let newStreak = stats.streak || 1;
+    const today = format(new Date(), 'yyyy-MM-dd');
+    if (stats.lastReadingDate && stats.lastReadingDate !== today) {
+      const lastDate = new Date(stats.lastReadingDate);
+      const yesterday = format(addDays(new Date(), -1), 'yyyy-MM-dd');
+      if (stats.lastReadingDate === yesterday) {
+        newStreak += 1;
+      } else {
+        newStreak = 1;
+      }
+    }
+
+    if (levelInfo.level > stats.level) {
+      setShowReward({ points: 0, message: `境界突破！你已晋升为 ${levelInfo.rank}` });
+      setTimeout(() => setShowReward(null), 5000);
+    }
+
+    const newStats: UserStats = {
       experience: Math.floor(newExp),
       level: levelInfo.level,
       rank: levelInfo.rank,
       booksCompleted: finished,
-      readingMinutes: duration
+      readingMinutes: duration,
+      streak: newStreak,
+      lastReadingDate: today
     };
     setStats(newStats);
     localStorage.setItem('shiori-stats', JSON.stringify(newStats));
@@ -358,13 +405,15 @@ export default function App() {
   const handleCompleteReview = (book: Book) => {
     const nextStage = (book.reviewStage || 0) + 1;
     const nextDate = calculateNextReviewDate(nextStage);
+    const today = format(new Date(), 'yyyy-MM-dd');
     const updated = {
       ...book,
       reviewStage: nextStage,
-      nextReviewDate: nextDate
+      nextReviewDate: nextDate,
+      reviewHistory: [...(book.reviewHistory || []), today]
     };
     handleUpdateBook(updated);
-    setShowReward({ points: 50, message: `复习完成！进入第 ${nextStage + 1} 阶段` });
+    setShowReward({ points: 150, message: `复习完成！获得 150 经验，进入第 ${nextStage + 1} 阶段` });
     setTimeout(() => setShowReward(null), 3000);
   };
 
@@ -390,14 +439,14 @@ export default function App() {
             initial={{ opacity: 0, y: 50, x: '-50%' }}
             animate={{ opacity: 1, y: 0, x: '-50%' }}
             exit={{ opacity: 0, y: 50, x: '-50%' }}
-            className="fixed bottom-10 left-1/2 z-[100] bg-accent text-paper px-8 py-4 rounded-full shadow-2xl flex items-center gap-4 border border-white/20"
+            className="fixed bottom-10 left-1/2 z-[100] bg-ink text-paper px-6 py-3 rounded-full shadow-deep flex items-center gap-4 border border-white/10 backdrop-blur-md"
           >
-            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-              <Trophy size={20} />
+            <div className="w-8 h-8 bg-white/10 rounded-full flex items-center justify-center border border-white/10">
+              <Trophy size={16} className="text-gold" />
             </div>
             <div>
-              <p className="text-sm font-bold ancient">{showReward.message}</p>
-              <p className="text-[10px] opacity-70 uppercase tracking-widest serif">Reading Achievement Unlocked</p>
+              <p className="text-xs font-bold ancient tracking-wide">{showReward.message}</p>
+              <p className="text-[8px] opacity-50 uppercase tracking-[0.2em] serif">Achievement Unlocked</p>
             </div>
           </motion.div>
         )}
@@ -409,10 +458,10 @@ export default function App() {
           <div className="flex items-center gap-4">
             <motion.div 
               whileHover={{ rotate: -2, scale: 1.02 }}
-              className="w-10 h-10 bg-ink rounded-sm flex items-center justify-center text-paper shadow-lg relative group"
+              className="w-10 h-10 bg-ink rounded-sm flex items-center justify-center text-paper shadow-xl relative group"
             >
-              <BookOpen size={20} />
-              <div className="absolute inset-0 border border-white/10 rounded-sm scale-90 group-hover:scale-100 transition-transform" />
+              <BookOpen size={20} className="relative z-10" />
+              <div className="absolute inset-0 border border-white/5 rounded-sm scale-90 group-hover:scale-100 transition-transform" />
             </motion.div>
             <div>
               <h1 className="ancient font-bold text-2xl tracking-tight text-ink ink-gradient">太虚幻境</h1>
@@ -454,11 +503,11 @@ export default function App() {
           <motion.div 
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-6 bg-white p-3 rounded-sm border border-black/[0.02] shadow-soft flex items-center justify-between relative overflow-hidden group"
+            className="mb-6 bg-white p-3 rounded-sm border border-vermilion/10 shadow-soft flex items-center justify-between relative overflow-hidden group"
           >
-            <div className="absolute left-0 top-0 bottom-0 w-1 bg-vermilion/40" />
+            <div className="absolute left-0 top-0 bottom-0 w-1 bg-vermilion/60" />
             <div className="flex items-center gap-3 relative z-10">
-              <div className="w-8 h-8 bg-vermilion/5 text-vermilion rounded-full flex items-center justify-center border border-vermilion/10">
+              <div className="w-8 h-8 bg-vermilion/5 text-vermilion rounded-full flex items-center justify-center border border-vermilion/10 shadow-inner">
                 <Bell size={14} className="animate-pulse" />
               </div>
               <div>
@@ -474,7 +523,7 @@ export default function App() {
                   document.getElementById('book-grid')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }, 100);
               }}
-              className="relative z-10 text-[9px] font-bold text-paper bg-vermilion px-3 py-1.5 rounded-sm hover:bg-vermilion/90 transition-all ancient tracking-widest shadow-lg shadow-vermilion/20"
+              className="relative z-10 text-[9px] font-bold text-paper bg-vermilion px-4 py-2 rounded-sm hover:bg-vermilion/90 transition-all ancient tracking-widest shadow-lg shadow-vermilion/30"
             >
               立即复习
             </button>
@@ -483,14 +532,14 @@ export default function App() {
 
         {/* Dashboard Section */}
         <div className="mb-8">
-          <div className="bg-white p-6 md:p-8 rounded-sm border border-black/[0.02] shadow-soft relative overflow-hidden group">
-            <div className="absolute top-0 right-0 p-6 opacity-[0.02] pointer-events-none group-hover:scale-105 transition-transform duration-2000">
+          <div className="bg-white p-6 md:p-8 rounded-sm border border-black/[0.01] shadow-soft relative overflow-hidden group">
+            <div className="absolute top-0 right-0 p-6 opacity-[0.03] pointer-events-none group-hover:scale-105 transition-transform duration-2000">
               <Library size={160} />
             </div>
             <div className="relative z-10">
               <div className="flex items-center gap-3 mb-3">
-                <div className="h-[1px] w-6 bg-vermilion/20" />
-                <span className="text-[8px] font-bold uppercase tracking-[0.3em] text-vermilion/40 serif">Achievement</span>
+                <div className="h-[1px] w-6 bg-vermilion/30" />
+                <span className="text-[8px] font-bold uppercase tracking-[0.3em] text-vermilion/60 serif">Achievement</span>
               </div>
               <h2 className="ancient text-2xl font-bold mb-3 text-ink ink-gradient">阅读成就</h2>
               <div className="max-w-xl">
@@ -498,7 +547,7 @@ export default function App() {
                   {randomExcerpt ? (
                     <span className="relative">
                       “{randomExcerpt.text}” 
-                      <span className="block mt-1.5 text-[9px] not-italic font-bold tracking-widest opacity-40 ancient text-indigo">—— {randomExcerpt.author}《{randomExcerpt.title}》</span>
+                      <span className="block mt-1.5 text-[9px] not-italic font-bold tracking-widest opacity-50 ancient text-indigo">—— {randomExcerpt.author}《{randomExcerpt.title}》</span>
                     </span>
                   ) : (
                     <>“读书百遍，其义自见。” 你已在幻境中积累了深厚的知识底蕴。</>
@@ -522,15 +571,15 @@ export default function App() {
                   </div>
                 </div>
                 <div className="space-y-0.5 group/stat">
-                  <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-stone-300 group-hover/stat:text-vermilion transition-colors">当前等级</p>
-                  <p className="text-lg font-bold ancient text-indigo/60 mt-0.5 tracking-tight group-hover/stat:text-vermilion transition-colors">{stats.rank}</p>
+                  <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-stone-300 group-hover/stat:text-vermilion transition-colors">连续读书</p>
+                  <div className="flex items-baseline gap-1.5">
+                    <p className="text-3xl font-bold ancient text-ink group-hover/stat:text-vermilion transition-colors">{stats.streak}</p>
+                    <span className="text-[10px] text-stone-300 serif italic">天</span>
+                  </div>
                 </div>
                 <div className="space-y-0.5 group/stat">
-                  <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-stone-300 group-hover/stat:text-gold transition-colors">累计章节</p>
-                  <div className="flex items-baseline gap-1.5">
-                    <p className="text-3xl font-bold ancient text-ink group-hover/stat:text-gold transition-colors">{books.reduce((acc, b) => acc + (b.chapters?.length || 0), 0)}</p>
-                    <span className="text-[10px] text-stone-300 serif italic">章</span>
-                  </div>
+                  <p className="text-[8px] font-bold uppercase tracking-[0.2em] text-stone-300 group-hover/stat:text-gold transition-colors">当前境界</p>
+                  <p className="text-lg font-bold ancient text-indigo/60 mt-0.5 tracking-tight group-hover/stat:text-gold transition-colors">{stats.rank}</p>
                 </div>
               </div>
             </div>
@@ -586,6 +635,25 @@ export default function App() {
         </div>
 
         {/* Grid */}
+        {activeTab === 'review' && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-8 bg-indigo/[0.02] p-8 rounded-sm border border-indigo/10 relative overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 p-8 opacity-[0.05] pointer-events-none">
+              <Timer size={120} />
+            </div>
+            <div className="relative z-10">
+              <h3 className="ancient text-2xl font-bold text-indigo/60 mb-2">温故而知新</h3>
+              <p className="text-stone-400 text-sm serif italic max-w-lg leading-relaxed">
+                “学而时习之，不亦说乎？” 当前有 {reviewNeededBooks.length} 本书进入了遗忘临界点。
+                及时复习不仅能巩固知识，还能获得更丰厚的经验奖励。
+              </p>
+            </div>
+          </motion.div>
+        )}
+
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4">
           {(activeTab === 'shelf' ? filteredBooks : reviewNeededBooks).map((book) => (
             <BookCard 
@@ -633,12 +701,12 @@ export default function App() {
                   <h2 className="ancient text-2xl font-bold text-balance ink-gradient">{selectedBook.title}</h2>
                   <p className="text-stone-400 mt-0.5 text-[10px] serif italic opacity-70">by {selectedBook.author}</p>
                 </div>
-                <div className="flex items-center gap-0.5 bg-white/80 px-2 py-1 rounded-full border border-black/[0.03] shadow-sm backdrop-blur-sm">
+                <div className="flex items-center gap-0.5 bg-white/80 px-2 py-1 rounded-full border border-black/[0.01] shadow-sm backdrop-blur-sm">
                   {[...Array(5)].map((_, i) => (
                     <Star 
                       key={i} 
                       size={12} 
-                      className={cn(i < selectedBook.rating ? "fill-ink/80 text-ink/80" : "text-stone-100")} 
+                      className={cn(i < selectedBook.rating ? "fill-gold text-gold" : "text-stone-100")} 
                     />
                   ))}
                 </div>
@@ -689,6 +757,19 @@ export default function App() {
                   </div>
                 </section>
 
+                {selectedBook.reviewHistory && selectedBook.reviewHistory.length > 0 && (
+                  <section>
+                    <h3 className="text-[9px] uppercase font-bold tracking-[0.2em] text-stone-300 serif mb-2">复习记录</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedBook.reviewHistory.map((date, i) => (
+                        <div key={i} className="px-2 py-1 bg-indigo/[0.03] border border-indigo/10 rounded-sm text-[8px] text-indigo/60 ancient">
+                          第 {i + 1} 次: {date}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
                 <section>
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-[10px] uppercase font-bold tracking-[0.3em] text-stone-300 serif">图书简介</h3>
@@ -698,13 +779,13 @@ export default function App() {
                           const res = await generateBookSummary(selectedBook.title, selectedBook.author);
                           handleUpdateBook({ ...selectedBook, summary: res.summary, keywords: res.keywords });
                         }}
-                        className="text-[10px] uppercase font-bold tracking-widest text-ink/40 flex items-center gap-1.5 hover:text-ink transition-colors"
+                        className="text-[10px] uppercase font-bold tracking-widest text-ink/30 flex items-center gap-1.5 hover:text-ink transition-colors"
                       >
                         <Sparkles size={12} /> 生成
                       </button>
                     )}
                   </div>
-                  <div className="text-stone-500 text-base leading-relaxed serif italic border-l border-black/[0.03] pl-5 bg-stone-50/30 p-5 rounded-r-lg">
+                  <div className="text-stone-500 text-sm leading-relaxed serif italic border-l border-vermilion/10 pl-5 bg-stone-50/20 p-5 rounded-r-lg">
                     {selectedBook.summary || "暂无简介。"}
                   </div>
                 </section>
@@ -726,15 +807,15 @@ export default function App() {
 
                 <section>
                   <h3 className="text-[10px] uppercase font-bold tracking-[0.3em] text-stone-300 serif mb-3">阅读体会</h3>
-                  <div className="bg-white p-5 rounded-lg border border-black/[0.02] min-h-[100px] whitespace-pre-wrap text-stone-600 text-base serif leading-relaxed shadow-sm italic">
+                  <div className="bg-white p-5 rounded-lg border border-black/[0.01] min-h-[100px] whitespace-pre-wrap text-stone-600 text-sm serif leading-relaxed shadow-sm italic">
                     {selectedBook.notes || "尚未留下感悟..."}
                   </div>
                 </section>
 
                 <section>
                   <h3 className="text-[10px] uppercase font-bold tracking-[0.3em] text-stone-300 serif mb-3">精彩摘录</h3>
-                  <div className="bg-stone-50/30 p-5 rounded-lg border-l-2 border-black/[0.05] italic text-stone-500 text-base">
-                    <Quote size={14} className="text-black/5 mb-2" />
+                  <div className="bg-stone-50/20 p-5 rounded-lg border-l-2 border-vermilion/10 italic text-stone-500 text-sm">
+                    <Quote size={14} className="text-vermilion/5 mb-2" />
                     {selectedBook.excerpts || "暂无摘录。"}
                   </div>
                 </section>
@@ -864,10 +945,10 @@ export default function App() {
               }
             }}
           >
-            <div className="grid grid-cols-3 gap-10">
+            <div className="grid grid-cols-3 gap-6">
               <div className="col-span-1">
-                <label className="text-[12px] uppercase font-bold tracking-[0.2em] text-stone-300 mb-4 block ancient">封面图片</label>
-                <div className="aspect-[3/4] bg-stone-50 rounded-sm border border-dashed border-stone-200 flex flex-col items-center justify-center text-stone-400 relative overflow-hidden group hover:border-ink/20 transition-all">
+                <label className="text-[10px] uppercase font-bold tracking-[0.2em] text-stone-300 mb-3 block ancient">封面图片</label>
+                <div className="aspect-[3/4] bg-stone-50/50 rounded-sm border border-dashed border-black/[0.05] flex flex-col items-center justify-center text-stone-400 relative overflow-hidden group hover:border-ink/20 transition-all shadow-inner">
                   <input 
                     type="file" 
                     accept="image/*"
@@ -882,61 +963,61 @@ export default function App() {
                       }
                     })}
                   />
-                  <ImageIcon size={36} className="mb-3 opacity-20" />
-                  <span className="text-[11px] font-bold uppercase tracking-widest ancient">上传封面</span>
+                  <ImageIcon size={28} className="mb-2 opacity-20" />
+                  <span className="text-[9px] font-bold uppercase tracking-widest ancient">上传封面</span>
                   <img 
                     id="coverPreview" 
                     src={editingBook?.coverUrl}
-                    className={cn("absolute inset-0 w-full h-full object-cover grayscale hover:grayscale-0 transition-all duration-700", !editingBook?.coverUrl && "hidden")} 
+                    className={cn("absolute inset-0 w-full h-full object-cover grayscale-[0.2] hover:grayscale-0 transition-all duration-700", !editingBook?.coverUrl && "hidden")} 
                     alt="" 
                   />
                   <input type="hidden" name="coverUrl" id="coverUrlInput" defaultValue={editingBook?.coverUrl} />
                 </div>
               </div>
-              <div className="col-span-2 space-y-6">
-                <div className="space-y-2.5">
-                  <label className="text-[12px] uppercase font-bold tracking-[0.2em] text-stone-300 ancient">书籍名称</label>
+              <div className="col-span-2 space-y-4">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold tracking-[0.2em] text-stone-300 ancient">书籍名称</label>
                   <input 
                     name="title" 
                     required 
                     defaultValue={editingBook?.title}
                     placeholder="例如：红楼梦"
-                    className="w-full bg-stone-50/50 border border-black/[0.03] rounded-sm px-5 py-3.5 focus:outline-none focus:border-ink/20 transition-all text-ink ancient text-lg"
+                    className="w-full bg-stone-50/50 border border-black/[0.02] rounded-sm px-4 py-2.5 focus:outline-none focus:border-ink/10 transition-all text-ink ancient text-base"
                   />
                 </div>
-                <div className="space-y-2.5">
-                  <label className="text-[12px] uppercase font-bold tracking-[0.2em] text-stone-300 ancient">作者</label>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold tracking-[0.2em] text-stone-300 ancient">作者</label>
                   <input 
                     name="author" 
                     required 
                     defaultValue={editingBook?.author}
                     placeholder="例如：曹雪芹"
-                    className="w-full bg-stone-50/50 border border-black/[0.03] rounded-sm px-5 py-3.5 focus:outline-none focus:border-ink/20 transition-all text-ink ancient text-lg"
+                    className="w-full bg-stone-50/50 border border-black/[0.02] rounded-sm px-4 py-2.5 focus:outline-none focus:border-ink/10 transition-all text-ink ancient text-base"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-6">
-                  <div className="space-y-2.5">
-                    <label className="text-[12px] uppercase font-bold tracking-[0.2em] text-stone-300 ancient">阅读状态</label>
-                    <select name="status" defaultValue={editingBook?.status || 'reading'} className="w-full bg-stone-50/50 border border-black/[0.03] rounded-sm px-5 py-3.5 focus:outline-none text-ink serif">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase font-bold tracking-[0.2em] text-stone-300 ancient">阅读状态</label>
+                    <select name="status" defaultValue={editingBook?.status || 'reading'} className="w-full bg-stone-50/50 border border-black/[0.02] rounded-sm px-4 py-2.5 focus:outline-none text-ink serif text-xs">
                       <option value="reading">正在读</option>
                       <option value="finished">已读完</option>
                       <option value="want-to-read">想读</option>
                     </select>
                   </div>
-                  <div className="space-y-2.5">
-                    <label className="text-[12px] uppercase font-bold tracking-[0.2em] text-stone-300 ancient">评分</label>
-                    <select name="rating" defaultValue={editingBook?.rating || 5} className="w-full bg-stone-50/50 border border-black/[0.03] rounded-sm px-5 py-3.5 focus:outline-none text-ink serif">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase font-bold tracking-[0.2em] text-stone-300 ancient">评分</label>
+                    <select name="rating" defaultValue={editingBook?.rating || 5} className="w-full bg-stone-50/50 border border-black/[0.02] rounded-sm px-4 py-2.5 focus:outline-none text-ink serif text-xs">
                       {[5,4,3,2,1].map(n => <option key={n} value={n}>{n} 星</option>)}
                     </select>
                   </div>
                 </div>
-                <div className="space-y-2.5">
-                  <label className="text-[12px] uppercase font-bold tracking-[0.2em] text-stone-300 ancient">复习日期</label>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] uppercase font-bold tracking-[0.2em] text-stone-300 ancient">复习日期</label>
                   <input 
                     type="date"
                     name="nextReviewDate"
                     defaultValue={editingBook?.nextReviewDate || format(addMonths(new Date(), 1), 'yyyy-MM-dd')}
-                    className="w-full bg-stone-50/50 border border-black/[0.03] rounded-sm px-5 py-3.5 focus:outline-none focus:border-ink/20 transition-all text-ink serif"
+                    className="w-full bg-stone-50/50 border border-black/[0.02] rounded-sm px-4 py-2.5 focus:outline-none focus:border-ink/10 transition-all text-ink serif text-xs"
                   />
                 </div>
               </div>
@@ -1122,87 +1203,119 @@ export default function App() {
         {isSharing && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm">
             <motion.div 
-              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              initial={{ scale: 0.98, opacity: 0, y: 10 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative w-full max-w-md bg-paper rounded-sm overflow-hidden shadow-2xl border border-accent/20"
+              exit={{ scale: 0.98, opacity: 0, y: 10 }}
+              className="relative w-full max-w-md bg-paper rounded-sm overflow-hidden shadow-deep border border-black/[0.02]"
             >
               <div id="share-card" className="p-10 bg-paper relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-10 opacity-[0.05] pointer-events-none">
+                <div className="absolute top-0 right-0 p-10 opacity-[0.03] pointer-events-none">
                   <BookOpen size={120} />
                 </div>
                 
                 <div className="flex gap-6 mb-8 relative z-10">
-                  <div className="w-24 aspect-[3/4] bg-stone-100 rounded-sm overflow-hidden shadow-lg border-l-4 border-accent/30">
+                  <div className="w-24 aspect-[3/4] bg-stone-50 rounded-sm overflow-hidden shadow-lg border-l-2 border-vermilion/20 relative">
                     <img 
                       src={isSharing.coverUrl || `https://picsum.photos/seed/${isSharing.id}/400/600`} 
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover grayscale-[0.2]"
                       referrerPolicy="no-referrer"
                     />
+                    <div className="absolute top-1 right-1 w-6 h-6 border border-vermilion/40 flex items-center justify-center rotate-12">
+                      <span className="text-[6px] text-vermilion/60 font-bold ancient leading-none text-center">太虚<br/>幻境</span>
+                    </div>
                   </div>
                   <div className="flex-1">
-                    <h2 className="ancient text-2xl font-bold text-ink mb-1">{isSharing.title}</h2>
-                    <p className="text-xs text-stone-400 serif mb-4">{isSharing.author}</p>
+                    <h2 className="ancient text-2xl font-bold text-ink mb-1 ink-gradient">{isSharing.title}</h2>
+                    <p className="text-xs text-stone-400 serif mb-4 italic">{isSharing.author}</p>
                     <div className="flex items-center gap-1">
                       {[...Array(5)].map((_, i) => (
-                        <Star key={i} size={12} className={cn(i < isSharing.rating ? "fill-accent text-accent" : "text-stone-200")} />
+                        <Star key={i} size={12} className={cn(i < isSharing.rating ? "fill-gold text-gold" : "text-stone-100")} />
                       ))}
                     </div>
                   </div>
                 </div>
 
                 <div className="space-y-6 relative z-10">
-                  <div className="bg-accent/5 p-6 rounded-sm border-l-2 border-accent/30">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-accent mb-3 serif">读书心得</p>
-                    <p className="text-sm text-ink/80 serif leading-relaxed italic">
+                  <div className="bg-stone-50/30 p-6 rounded-sm border-l border-vermilion/10">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-stone-300 mb-3 serif">读书心得</p>
+                    <p className="text-sm text-ink/70 serif leading-relaxed italic">
                       {isSharing.notes || "暂无心得体会。"}
                     </p>
                   </div>
 
+                  {isSharing.excerpts && (
+                    <div className="bg-vermilion/[0.02] p-6 rounded-sm border-r border-vermilion/10 text-right">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-vermilion/30 mb-3 serif">精彩摘录</p>
+                      <p className="text-sm text-ink/60 serif leading-relaxed italic">
+                        “{isSharing.excerpts}”
+                      </p>
+                    </div>
+                  )}
+
                   {isSharing.chapters && isSharing.chapters.length > 0 && (
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-accent mb-3 serif">阅读记录</p>
+                      <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-stone-300 mb-3 serif">阅读记录</p>
                       <div className="space-y-2">
                         {isSharing.chapters.slice(0, 3).map((c, i) => (
-                          <div key={i} className="flex items-center gap-2 text-xs text-stone-500 serif">
-                            <div className="w-1 h-1 rounded-full bg-accent/30" />
-                            <span className="font-bold text-stone-700">{c.title}</span>
+                          <div key={i} className="flex items-center gap-2 text-xs text-stone-500 serif italic">
+                            <div className="w-1 h-1 rounded-full bg-vermilion/20" />
+                            <span className="font-bold text-stone-600">{c.title}</span>
                           </div>
                         ))}
                         {isSharing.chapters.length > 3 && (
-                          <p className="text-[10px] text-stone-300 italic">... 及其他 {isSharing.chapters.length - 3} 个章节</p>
+                          <p className="text-[9px] text-stone-300 italic serif">... 及其他 {isSharing.chapters.length - 3} 个章节</p>
                         )}
                       </div>
                     </div>
                   )}
                 </div>
 
-                <div className="mt-12 pt-8 border-t border-accent/10 flex items-center justify-between">
+                <div className="mt-12 pt-8 border-t border-black/[0.03] flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-accent rounded-sm flex items-center justify-center text-paper shadow-md rotate-[-2deg]">
+                    <div className="w-8 h-8 bg-ink rounded-sm flex items-center justify-center text-paper shadow-md rotate-[-2deg] border border-white/10">
                       <BookOpen size={16} />
                     </div>
-                    <span className="ancient text-sm font-bold text-ink">太虚幻境</span>
+                    <span className="ancient text-sm font-bold text-ink tracking-widest">太虚幻境</span>
                   </div>
                   <div className="text-right">
-                    <p className="text-[8px] uppercase tracking-widest text-stone-300 font-bold serif">Digital Reading Space</p>
+                    <p className="text-[7px] uppercase tracking-[0.3em] text-stone-300 font-bold serif">Digital Reading Space</p>
+                    {isSharing.readingDuration && (
+                      <p className="text-[8px] text-stone-400 ancient mt-1">累计阅读 {isSharing.readingDuration} 分钟</p>
+                    )}
+                    {isSharing.reviewHistory && isSharing.reviewHistory.length > 0 && (
+                      <p className="text-[8px] text-indigo/40 ancient mt-0.5">已完成 {isSharing.reviewHistory.length} 次复习</p>
+                    )}
                   </div>
                 </div>
               </div>
               
-              <div className="bg-stone-50 p-4 border-t border-accent/10 flex justify-end gap-3">
+              <div className="bg-stone-50/50 p-4 border-t border-black/[0.02] flex justify-end gap-3">
                 <button 
                   onClick={() => setIsSharing(null)}
-                  className="px-6 py-2 text-xs font-bold text-stone-400 hover:text-stone-600 transition-colors ancient"
+                  className="px-6 py-2 text-xs font-bold text-stone-400 hover:text-stone-600 transition-colors ancient tracking-widest"
                 >
                   取消
                 </button>
                 <button 
-                  onClick={() => {
-                    alert('分享卡片已生成（演示环境仅供预览）');
-                    setIsSharing(null);
+                  onClick={async () => {
+                    const node = document.getElementById('share-card');
+                    if (node) {
+                      try {
+                        const dataUrl = await toPng(node, { quality: 0.95, pixelRatio: 2 });
+                        const link = document.createElement('a');
+                        link.download = `太虚幻境-${isSharing.title}.png`;
+                        link.href = dataUrl;
+                        link.click();
+                        setShowReward({ points: 0, message: '分享卡片已保存至相册' });
+                        setTimeout(() => setShowReward(null), 3000);
+                        setIsSharing(null);
+                      } catch (err) {
+                        console.error('oops, something went wrong!', err);
+                        alert('生成图片失败，请重试');
+                      }
+                    }
                   }}
-                  className="bg-accent text-paper px-8 py-2 rounded-sm text-xs font-bold shadow-lg shadow-accent/10 hover:translate-y-[-1px] transition-all ancient"
+                  className="bg-ink text-paper px-8 py-2 rounded-sm text-xs font-bold shadow-lg shadow-ink/10 hover:translate-y-[-1px] transition-all ancient tracking-widest"
                 >
                   保存图片
                 </button>

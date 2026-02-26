@@ -24,6 +24,7 @@ export interface Book {
   readingDuration?: number; // in minutes
   nextReviewDate?: string;
   reviewStage?: number; // 0, 1, 2, 3, 4, 5...
+  reviewHistory?: string[]; // array of ISO date strings
   mindMapUrl?: string;
   additionalPhotos?: string[];
   chapters?: Chapter[];
@@ -40,6 +41,8 @@ export interface UserStats {
   rank: string;
   booksCompleted: number;
   readingMinutes: number;
+  streak: number; // consecutive days of reading
+  lastReadingDate?: string;
 }
 
 
